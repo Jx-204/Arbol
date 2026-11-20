@@ -1,12 +1,6 @@
-import json
-import os
 import tkinter as tk
 from tkinter import ttk, messagebox
 from datetime import datetime, date, timedelta
-
-# El archivo de datos se guarda junto al programa
-ARCHIVO = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tareas.json")
-
 
 class Nodo:
     def __init__(self, codigo, tipo, nombre, fecha, prioridad, etiquetas, notas):
@@ -116,70 +110,6 @@ FUENTE = "Segoe UI"
 
 COLUMNAS = [("codigo", "Código", 60), ("tipo", "Tipo", 80), ("nombre", "Nombre", 190),
             ("fecha", "Vence", 90), ("prioridad", "Prioridad", 80), ("etiquetas", "Etiquetas", 140)]
-
-
-# ---------------------------------------------------------------------------
-# Guardado y carga en JSON
-# ---------------------------------------------------------------------------
-
-def guardar_datos():
-    datos = []
-    for n in arbol.inorden():
-        datos.append({
-            "codigo": n.codigo,
-            "tipo": n.tipo,
-            "nombre": n.nombre,
-            "fecha": n.fecha.isoformat(),
-            "prioridad": n.prioridad,
-            "etiquetas": n.etiquetas,
-            "notas": n.notas,
-        })
-    try:
-        # Se escribe en un archivo temporal y luego se reemplaza,
-        # así un fallo a mitad de escritura no daña el archivo anterior.
-        temporal = ARCHIVO + ".tmp"
-        with open(temporal, "w", encoding="utf-8") as f:
-            json.dump(datos, f, ensure_ascii=False, indent=2)
-        os.replace(temporal, ARCHIVO)
-    except OSError as error:
-        messagebox.showerror("Error", f"No se pudo guardar el archivo:\n{error}")
-
-
-def insertar_equilibrado(lista, inicio, fin):
-    # Inserta primero el elemento del medio, para que el árbol cargado
-    # quede equilibrado y no se convierta en una lista enlazada.
-    if inicio > fin:
-        return
-    medio = (inicio + fin) // 2
-    arbol.insertar(lista[medio])
-    insertar_equilibrado(lista, inicio, medio - 1)
-    insertar_equilibrado(lista, medio + 1, fin)
-
-
-def cargar_datos():
-    # Devuelve True si había un archivo válido (aunque esté vacío)
-    if not os.path.exists(ARCHIVO):
-        return False
-    try:
-        with open(ARCHIVO, "r", encoding="utf-8") as f:
-            datos = json.load(f)
-        nodos = []
-        for d in datos:
-            nodos.append(Nodo(int(d["codigo"]), d["tipo"], d["nombre"],
-                              date.fromisoformat(d["fecha"]), d["prioridad"],
-                              list(d["etiquetas"]), d["notas"]))
-    except (OSError, ValueError, KeyError, TypeError):
-        # Archivo dañado: se conserva una copia y se empieza de cero
-        try:
-            os.replace(ARCHIVO, ARCHIVO + ".bak")
-        except OSError:
-            pass
-        messagebox.showwarning("Aviso", "No se pudo leer tareas.json.\n"
-                               "Se guardó una copia como tareas.json.bak y se inicia vacío.")
-        return False
-    nodos.sort(key=lambda n: n.codigo)
-    insertar_equilibrado(nodos, 0, len(nodos) - 1)
-    return True
 
 
 # ---------------------------------------------------------------------------
@@ -375,14 +305,12 @@ def ventana_crear(tipo, nodo_editar=None):
             nodo_editar.notas = notas
             refrescar()
             tabla.selection_set(str(nodo_editar.codigo))   # mantiene la fila seleccionada
-            guardar_datos()
             ventana_op.destroy()
             return
 
         nodo = Nodo(codigo, tipo, nombre, fecha, c_prioridad.get(), etiquetas, notas)
         if arbol.insertar(nodo):
             refrescar()
-            guardar_datos()
             ventana_op.destroy()
         else:
             messagebox.showwarning("Aviso", f"El código {codigo} ya existe. No se puede registrar.",
@@ -458,7 +386,6 @@ def ventana_eliminar():
         if messagebox.askyesno("Confirmar", "¿Eliminar " + nodo.nombre + "?", parent=ventana_op):
             arbol.eliminar(codigo)
             refrescar()
-            guardar_datos()
             ventana_op.destroy()
 
     crear_boton(cuerpo, "Eliminar", eliminar, ROJO).pack(fill="x", pady=(16, 0))
@@ -579,18 +506,17 @@ etiqueta_notas = tk.Label(caja_notas, text="", bg=TARJETA, fg=GRIS, font=(FUENTE
                           anchor="w", justify="left", wraplength=690)
 etiqueta_notas.pack(fill="both", expand=True, padx=14, pady=6)
 
-# Se cargan los datos guardados; si no hay archivo, se usan los datos de ejemplo
-if not cargar_datos():
-    hoy = date.today()
-    arbol.insertar(Nodo(8, "Proyecto", "Proyecto final", hoy + timedelta(days=14), "Alta",
-                        ["universidad", "grupo"], "Aplicación en Python con ABB e interfaz gráfica."))
-    arbol.insertar(Nodo(3, "Tarea", "Programar el árbol ABB", hoy - timedelta(days=2), "Alta",
-                        ["universidad", "código"], "Insertar, buscar y eliminar."))
-    arbol.insertar(Nodo(10, "Tarea", "Diseñar la interfaz", hoy + timedelta(days=5), "Media",
-                        ["universidad", "diseño"], "Menú lateral y tabla."))
-    arbol.insertar(Nodo(1, "Tarea", "Pagar el internet", hoy - timedelta(days=5), "Baja",
-                        ["casa"], "Se pasó la fecha de pago."))
-    guardar_datos()
+# Datos de ejemplo: todo vive en el árbol, en memoria
+hoy = date.today()
+arbol.insertar(Nodo(8, "Proyecto", "Proyecto final", hoy + timedelta(days=14), "Alta",
+                    ["universidad", "grupo"], "Aplicación en Python con ABB e interfaz gráfica."))
+arbol.insertar(Nodo(3, "Tarea", "Programar el árbol ABB", hoy - timedelta(days=2), "Alta",
+                    ["universidad", "código"], "Insertar, buscar y eliminar."))
+arbol.insertar(Nodo(10, "Tarea", "Diseñar la interfaz", hoy + timedelta(days=5), "Media",
+                    ["universidad", "diseño"], "Menú lateral y tabla."))
+arbol.insertar(Nodo(1, "Tarea", "Pagar el internet", hoy - timedelta(days=5), "Baja",
+                    ["casa"], "Se pasó la fecha de pago."))
+
 
 refrescar()
 ventana.mainloop()

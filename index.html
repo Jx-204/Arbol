@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gestión de tareas y proyectos</title>
+<style>
+:root{--f:#0b1220;--l:#0f172a;--t:#162033;--c:#1e2b42;--b:#2a3a57;--tx:#e5e9f2;--g:#8b98b3;--a:#6366f1;--r:#ef4444;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--f);color:var(--tx);font-family:"Segoe UI",system-ui,-apple-system,Roboto,sans-serif;display:grid;grid-template-columns:230px 1fr;min-height:100vh}
+aside{background:var(--l);border-top:4px solid var(--a);padding:22px 16px}
+aside small{display:block;color:#818cf8;font-weight:700;font-size:11px;padding-left:8px}
+h1{font-size:24px;margin:2px 8px;line-height:1.15}
+aside p{color:var(--g);font-size:12px;margin:0 8px 18px}
+button{background:var(--a);color:#fff;border:0;border-radius:4px;padding:10px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer}
+nav button{display:block;width:100%;margin:4px 0;background:var(--c)}
+nav button:hover,.sec:hover{filter:brightness(1.25)}
+.hint{font-size:11px!important;line-height:1.4;margin-top:16px!important}
+main{padding:24px;min-width:0}
+h2{margin:0;font-size:24px}
+.sub{color:var(--g);font-size:13px;margin:4px 0 16px}
+.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
+.card{background:var(--t);border:1px solid var(--b);padding:8px 14px}
+.card b{display:block;font-size:26px}
+.card span{color:var(--g);font-size:12px}
+#filtro{display:flex;justify-content:space-between;align-items:center;gap:8px;background:var(--t);border:1px solid var(--b);padding:6px 12px;margin-bottom:10px;font-size:13px;color:#818cf8}
+#filtro[hidden]{display:none}
+#filtro button{padding:5px 10px;font-size:12px}
+.tw{border:1px solid var(--b);background:var(--t);overflow:auto;max-height:340px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{position:sticky;top:0;background:var(--c);color:var(--g);font-size:12px;text-align:left;padding:9px 10px}
+td{padding:8px 10px;border-top:1px solid var(--b);white-space:nowrap}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:#1c2a44}
+tr.venc td{color:#f87171}
+tbody tr.sel{background:var(--a)}
+tr.sel td{color:#fff}
+.vacio td{color:var(--g);text-align:center;cursor:default}
+#notas{margin-top:12px;background:var(--t);border:1px solid var(--b);padding:12px 14px;color:var(--g);font-size:14px;min-height:46px;white-space:pre-wrap}
+dialog{background:var(--f);color:var(--tx);border:1px solid var(--b);border-radius:8px;padding:0;width:min(420px,92vw)}
+dialog::backdrop{background:#000a}
+.dh{background:var(--l);border-top:3px solid var(--a);padding:14px 24px}
+.dh b{display:block;font-size:17px}
+.dh span{color:var(--g);font-size:12px}
+.db{padding:4px 24px 20px}
+label{display:block;color:var(--g);font-size:11px;font-weight:700;margin-top:12px}
+dialog input,dialog select,dialog textarea{display:block;width:100%;margin-top:4px;background:var(--c);color:var(--tx);border:1px solid var(--b);border-radius:4px;padding:8px;font:inherit;font-size:14px}
+.err{color:#f87171;font-size:13px;min-height:18px;margin:10px 0 0}
+.btns{display:flex;gap:8px;margin-top:8px}
+.btns button{flex:1}
+.sec{background:var(--c)}
+.del{background:var(--r)}
+@media(max-width:800px){
+ body{grid-template-columns:1fr}
+ nav{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+ nav button{margin:0}
+ .cards{grid-template-columns:1fr 1fr}
+}
+</style>
+</head>
+<body>
+<aside>
+  <small>GESTIÓN DE</small>
+  <h1>Tareas y<br>Proyectos</h1>
+  <p>Árbol Binario de Búsqueda</p>
+  <nav id="menu"></nav>
+  <p class="hint">Los datos se guardan en este navegador. Usa Exportar JSON para hacer una copia o llevarlos a otro dispositivo.</p>
+</aside>
+<main>
+  <h2>Panel general</h2>
+  <p class="sub">Tareas y proyectos ordenados por código (doble clic para editar)</p>
+  <div class="cards">
+    <div class="card"><b id="v-total">0</b><span>Total</span></div>
+    <div class="card"><b id="v-tareas" style="color:#818cf8">0</b><span>Tareas</span></div>
+    <div class="card"><b id="v-proyectos" style="color:#34d399">0</b><span>Proyectos</span></div>
+    <div class="card"><b id="v-vencidas" style="color:#f87171">0</b><span>Vencidas</span></div>
+  </div>
+  <div id="filtro" hidden></div>
+  <div class="tw">
+    <table>
+      <thead><tr><th>Código</th><th>Tipo</th><th>Nombre</th><th>Vence</th><th>Prioridad</th><th>Etiquetas</th></tr></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+  <div id="notas"></div>
+</main>
+<dialog id="dlg"></dialog>
+<input type="file" id="file" accept=".json,application/json" hidden>
+
+<script>
+// ---------- Árbol binario de búsqueda ----------
+class Nodo {
+  constructor(codigo, tipo, nombre, fecha, prioridad, etiquetas, notas) {
+    Object.assign(this, { codigo, tipo, nombre, fecha, prioridad, etiquetas, notas });
+    this.izq = null;
+    this.der = null;
+  }
+}
+
+class Arbol {
+  constructor() { this.raiz = null; }
+
+  insertar(n) {                       // false si el código ya existe
+    if (!this.raiz) { this.raiz = n; return true; }
+    let a = this.raiz;
+    while (true) {
+      if (n.codigo < a.codigo) {
+        if (!a.izq) { a.izq = n; return true; }
+        a = a.izq;
+      } else if (n.codigo > a.codigo) {
+        if (!a.der) { a.der = n; return true; }
+        a = a.der;
+      } else return false;
+    }
+  }
+
+  buscar(c) {
+    let a = this.raiz;
+    while (a && a.codigo !== c) a = c < a.codigo ? a.izq : a.der;
+    return a;
+  }
+
+  eliminar(c) { this.raiz = this._el(this.raiz, c); }
+
+  _el(a, c) {
+    if (!a) return null;
+    if (c < a.codigo) a.izq = this._el(a.izq, c);
+    else if (c > a.codigo) a.der = this._el(a.der, c);
+    else {
+      if (!a.izq) return a.der;       // sin hijos o un solo hijo
+      if (!a.der) return a.izq;
+      let s = a.der;                  // dos hijos: menor del lado derecho
+      while (s.izq) s = s.izq;
+      Object.assign(a, { codigo: s.codigo, tipo: s.tipo, nombre: s.nombre, fecha: s.fecha,
+                         prioridad: s.prioridad, etiquetas: s.etiquetas, notas: s.notas });
+      a.der = this._el(a.der, s.codigo);
+    }
+    return a;
+  }
+
+  inorden() {                         // iterativo, sin límite de recursión
+    const res = [], pila = [];
+    let a = this.raiz;
+    while (a || pila.length) {
+      while (a) { pila.push(a); a = a.izq; }
+      a = pila.pop();
+      res.push(a);
+      a = a.der;
+    }
+    return res;
+  }
+}
+
+let arbol = new Arbol();
+let sel = null;      // código seleccionado
+let filtro = null;   // { txt, fn }
+
+// ---------- Utilidades ----------
+const q = s => dlg.querySelector(s);
+const dia = o => {
+  const d = new Date();
+  d.setDate(d.getDate() + o);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+};
+const hoy = () => dia(0);
+const fmt = f => f.split('-').reverse().join('/');
+const err = m => { q('#err').textContent = m; return false; };
+
+// ---------- Guardado ----------
+const KEY = 'gestion-tareas-abb';
+
+function datos() {
+  return arbol.inorden().map(n => ({ codigo: n.codigo, tipo: n.tipo, nombre: n.nombre, fecha: n.fecha,
+    prioridad: n.prioridad, etiquetas: n.etiquetas, notas: n.notas }));
+}
+
+function guardar() {
+  try { localStorage.setItem(KEY, JSON.stringify(datos())); }
+  catch (e) { alert('No se pudo guardar en el navegador. Exporta tus datos como respaldo.'); }
+}
+
+function validar(d) {
+  if (!Array.isArray(d)) throw new Error('el archivo debe contener una lista');
+  return d.map(x => {
+    if (!x || !Number.isInteger(x.codigo)) throw new Error('hay un código que no es entero');
+    if (!['Tarea', 'Proyecto'].includes(x.tipo)) throw new Error('tipo inválido en el código ' + x.codigo);
+    if (typeof x.nombre !== 'string' || !x.nombre.trim()) throw new Error('falta el nombre en el código ' + x.codigo);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(x.fecha)) throw new Error('fecha inválida en el código ' + x.codigo);
+    if (!['Alta', 'Media', 'Baja'].includes(x.prioridad)) throw new Error('prioridad inválida en el código ' + x.codigo);
+    if (!Array.isArray(x.etiquetas)) throw new Error('etiquetas inválidas en el código ' + x.codigo);
+    return new Nodo(x.codigo, x.tipo, x.nombre.trim(), x.fecha, x.prioridad,
+                    x.etiquetas.map(String), typeof x.notas === 'string' ? x.notas : '');
+  });
+}
+
+function equilibrado(l, a, b) {       // inserta por el punto medio: árbol equilibrado
+  if (a > b) return;
+  const m = (a + b) >> 1;
+  arbol.insertar(l[m]);
+  equilibrado(l, a, m - 1);
+  equilibrado(l, m + 1, b);
+}
+
+function cargarLista(l) {
+  arbol = new Arbol();
+  l.sort((x, y) => x.codigo - y.codigo);
+  equilibrado(l, 0, l.length - 1);
+}
+
+// ---------- Interfaz ----------
+function render() {
+  const todos = arbol.inorden(), h = hoy();
+  const tareas = todos.filter(n => n.tipo === 'Tarea').length;
+  document.getElementById('v-total').textContent = todos.length;
+  document.getElementById('v-tareas').textContent = tareas;
+  document.getElementById('v-proyectos').textContent = todos.length - tareas;
+  document.getElementById('v-vencidas').textContent = todos.filter(n => n.fecha < h).length;
+
+  const lista = filtro ? filtro.fn(todos) : todos;
+  const fe = document.getElementById('filtro');
+  fe.hidden = !filtro;
+  if (filtro) {
+    fe.innerHTML = '<span></span><button class="sec">Quitar filtro</button>';
+    fe.firstChild.textContent = 'Mostrando: ' + filtro.txt + ' (' + lista.length + ')';
+    fe.lastChild.onclick = () => { filtro = null; render(); };
+  }
+
+  if (sel !== null && !arbol.buscar(sel)) sel = null;
+  tbody.replaceChildren();
+  lista.forEach(n => {
+    const tr = document.createElement('tr');
+    if (n.fecha < h) tr.className = 'venc';
+    if (n.codigo === sel) tr.classList.add('sel');
+    [n.codigo, n.tipo, n.nombre, fmt(n.fecha), n.prioridad, n.etiquetas.join(', ')].forEach(v => {
+      const td = document.createElement('td');
+      td.textContent = v;
+      tr.append(td);
+    });
+    tr.onclick = () => {
+      sel = n.codigo;
+      tbody.querySelectorAll('tr.sel').forEach(r => r.classList.remove('sel'));
+      tr.classList.add('sel');
+      mostrarNotas();
+    };
+    tr.ondblclick = () => form(n.tipo, n);
+    tbody.append(tr);
+  });
+  if (!lista.length) {
+    const tr = document.createElement('tr');
+    tr.className = 'vacio';
+    tr.innerHTML = '<td colspan="6">No hay elementos para mostrar.</td>';
+    tbody.append(tr);
+  }
+  mostrarNotas();
+}
+
+function mostrarNotas() {
+  const n = sel !== null ? arbol.buscar(sel) : null;
+  document.getElementById('notas').textContent = n
+    ? 'Notas de ' + n.nombre + ': ' + (n.notas || 'Sin notas')
+    : 'Selecciona una fila para ver sus notas.';
+}
+
+function abrir(titulo, sub, html, acciones) {
+  dlg.innerHTML = `<div class="dh"><b>${titulo}</b><span>${sub}</span></div>
+    <div class="db">${html}<p class="err" id="err"></p><div class="btns"></div></div>`;
+  acciones.forEach(a => {
+    const x = document.createElement('button');
+    x.textContent = a.t;
+    x.className = a.c || '';
+    x.onclick = () => { if (a.f() !== false) dlg.close(); };
+    q('.btns').append(x);
+  });
+  dlg.showModal();
+}
+
+const cancelar = { t: 'Cancelar', c: 'sec', f: () => {} };
+
+function form(tipo, n) {
+  const ed = !!n;
+  abrir((ed ? 'Editar ' : 'Nueva ') + tipo.toLowerCase(),
+    ed ? 'Modifica los datos y guarda los cambios' : 'Completa los datos y pulsa Guardar',
+    `<label>CÓDIGO (NÚMERO)<input id="f-cod" type="number" step="1"></label>
+     <label>NOMBRE<input id="f-nom" maxlength="80"></label>
+     <label>FECHA DE VENCIMIENTO<input id="f-fec" type="date"></label>
+     <label>PRIORIDAD<select id="f-pri"><option>Alta<option selected>Media<option>Baja</select></label>
+     <label>ETIQUETAS (SEPARADAS POR COMAS)<input id="f-eti"></label>
+     <label>NOTAS<textarea id="f-not" rows="3"></textarea></label>`,
+    [{ t: ed ? 'Guardar cambios' : 'Guardar', f: () => {
+        const nombre = q('#f-nom').value.trim();
+        if (!nombre) return err('El nombre es obligatorio.');
+        const fecha = q('#f-fec').value;
+        if (!fecha) return err('Elige una fecha de vencimiento.');
+        const eti = q('#f-eti').value.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+        const notas = q('#f-not').value.trim(), pri = q('#f-pri').value;
+        if (ed) {
+          Object.assign(n, { nombre, fecha, prioridad: pri, etiquetas: eti, notas });
+          sel = n.codigo;
+        } else {
+          const cod = Number(q('#f-cod').value);
+          if (q('#f-cod').value === '' || !Number.isInteger(cod)) return err('El código debe ser un número entero.');
+          if (!arbol.insertar(new Nodo(cod, tipo, nombre, fecha, pri, eti, notas)))
+            return err('El código ' + cod + ' ya existe.');
+          sel = cod;
+        }
+        guardar();
+        render();
+      } }, cancelar]);
+  if (ed) {
+    q('#f-cod').value = n.codigo;
+    q('#f-cod').readOnly = true;      // el código es la llave del árbol
+    q('#f-nom').value = n.nombre;
+    q('#f-fec').value = n.fecha;
+    q('#f-pri').value = n.prioridad;
+    q('#f-eti').value = n.etiquetas.join(', ');
+    q('#f-not').value = n.notas;
+  }
+}
+
+function editar() {
+  const n = sel !== null ? arbol.buscar(sel) : null;
+  if (!n) return alert('Primero selecciona una fila de la tabla.');
+  form(n.tipo, n);
+}
+
+function buscar() {
+  abrir('Buscar', 'Busca por código o por nombre', '<label>CÓDIGO O TEXTO<input id="f-q"></label>', [
+    { t: 'Por código', f: () => {
+        const v = q('#f-q').value.trim(), c = Number(v);
+        if (v === '' || !Number.isInteger(c)) return err('Escribe un código numérico.');
+        if (!arbol.buscar(c)) return err('El código ' + c + ' no fue encontrado.');
+        filtro = { txt: 'código ' + c, fn: l => l.filter(n => n.codigo === c) };
+        render();
+      } },
+    { t: 'Por nombre', c: 'sec', f: () => {
+        const v = q('#f-q').value.trim().toLowerCase();
+        if (!v) return err('Escribe un texto.');
+        if (!arbol.inorden().some(n => n.nombre.toLowerCase().includes(v))) return err('No se encontraron resultados.');
+        filtro = { txt: 'nombre con "' + v + '"', fn: l => l.filter(n => n.nombre.toLowerCase().includes(v)) };
+        render();
+      } }]);
+}
+
+function eliminar() {
+  abrir('Eliminar', 'Escribe el código a eliminar', '<label>CÓDIGO<input id="f-cod" type="number"></label>', [
+    { t: 'Eliminar', c: 'del', f: () => {
+        const v = q('#f-cod').value, n = v !== '' && arbol.buscar(Number(v));
+        if (!n) return err('El código ' + v + ' no existe.');
+        if (!confirm('¿Eliminar ' + n.nombre + '?')) return false;
+        arbol.eliminar(n.codigo);
+        guardar();
+        render();
+      } }, cancelar]);
+  if (sel !== null) q('#f-cod').value = sel;
+}
+
+function vencidas() {
+  filtro = { txt: 'vencidas', fn: l => l.filter(n => n.fecha < hoy()) };
+  render();
+}
+
+function etiquetas() {
+  abrir('Tareas por etiqueta', 'Escribe una etiqueta y genera el reporte', '<label>ETIQUETA<input id="f-q"></label>', [
+    { t: 'Generar reporte', f: () => {
+        const v = q('#f-q').value.trim().toLowerCase();
+        if (!v) return err('Escribe una etiqueta.');
+        const ok = n => n.etiquetas.some(e => e.includes(v));
+        if (!arbol.inorden().some(ok)) return err('No hay elementos con esa etiqueta.');
+        filtro = { txt: 'etiqueta "' + v + '"', fn: l => l.filter(ok) };
+        render();
+      } }, cancelar]);
+}
+
+function exportar() {
+  const blob = new Blob([JSON.stringify(datos(), null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'tareas.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+file.onchange = () => {
+  const f = file.files[0];
+  if (!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    try {
+      const l = validar(JSON.parse(r.result));
+      if (!confirm('Se reemplazarán los datos actuales por ' + l.length + ' elementos. ¿Continuar?')) return;
+      cargarLista(l);
+      sel = null;
+      filtro = null;
+      guardar();
+      render();
+    } catch (e) { alert('Archivo no válido: ' + e.message); }
+  };
+  r.readAsText(f);
+  file.value = '';
+};
+
+[['Nueva tarea', () => form('Tarea')], ['Nuevo proyecto', () => form('Proyecto')], ['Editar', editar],
+ ['Buscar', buscar], ['Eliminar', eliminar], ['Tareas vencidas', vencidas], ['Tareas por etiqueta', etiquetas],
+ ['Exportar JSON', exportar], ['Importar JSON', () => file.click()]].forEach(([t, f]) => {
+  const b = document.createElement('button');
+  b.textContent = t;
+  b.onclick = f;
+  menu.append(b);
+});
+
+// ---------- Inicio: cargar datos guardados o usar los de ejemplo ----------
+let raw = null, cargado = false;
+try { raw = localStorage.getItem(KEY); } catch (e) {}
+if (raw !== null) {
+  try { cargarLista(validar(JSON.parse(raw))); cargado = true; }
+  catch (e) { try { localStorage.setItem(KEY + '.bak', raw); } catch (_) {} }
+}
+if (!cargado) {
+  [new Nodo(8, 'Proyecto', 'Proyecto final', dia(14), 'Alta', ['universidad', 'grupo'], 'Aplicación en Python con ABB e interfaz gráfica.'),
+   new Nodo(3, 'Tarea', 'Programar el árbol ABB', dia(-2), 'Alta', ['universidad', 'código'], 'Insertar, buscar y eliminar.'),
+   new Nodo(10, 'Tarea', 'Diseñar la interfaz', dia(5), 'Media', ['universidad', 'diseño'], 'Menú lateral y tabla.'),
+   new Nodo(1, 'Tarea', 'Pagar el internet', dia(-5), 'Baja', ['casa'], 'Se pasó la fecha de pago.')
+  ].forEach(n => arbol.insertar(n));
+  guardar();
+}
+render();
+</script>
+</body>
+</html>

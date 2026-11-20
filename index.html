@@ -64,7 +64,7 @@ dialog input,dialog select,dialog textarea{display:block;width:100%;margin-top:4
   <h1>Tareas y<br>Proyectos</h1>
   <p>Árbol Binario de Búsqueda</p>
   <nav id="menu"></nav>
-  <p class="hint">Los datos se guardan en este navegador. Usa Exportar JSON para hacer una copia o llevarlos a otro dispositivo.</p>
+  <p class="hint">Los datos viven en memoria: se mantienen mientras esta pestaña esté abierta.</p>
 </aside>
 <main>
   <h2>Panel general</h2>
@@ -85,7 +85,6 @@ dialog input,dialog select,dialog textarea{display:block;width:100%;margin-top:4
   <div id="notas"></div>
 </main>
 <dialog id="dlg"></dialog>
-<input type="file" id="file" accept=".json,application/json" hidden>
 
 <script>
 // ---------- Árbol binario de búsqueda ----------
@@ -165,47 +164,6 @@ const dia = o => {
 const hoy = () => dia(0);
 const fmt = f => f.split('-').reverse().join('/');
 const err = m => { q('#err').textContent = m; return false; };
-
-// ---------- Guardado ----------
-const KEY = 'gestion-tareas-abb';
-
-function datos() {
-  return arbol.inorden().map(n => ({ codigo: n.codigo, tipo: n.tipo, nombre: n.nombre, fecha: n.fecha,
-    prioridad: n.prioridad, etiquetas: n.etiquetas, notas: n.notas }));
-}
-
-function guardar() {
-  try { localStorage.setItem(KEY, JSON.stringify(datos())); }
-  catch (e) { alert('No se pudo guardar en el navegador. Exporta tus datos como respaldo.'); }
-}
-
-function validar(d) {
-  if (!Array.isArray(d)) throw new Error('el archivo debe contener una lista');
-  return d.map(x => {
-    if (!x || !Number.isInteger(x.codigo)) throw new Error('hay un código que no es entero');
-    if (!['Tarea', 'Proyecto'].includes(x.tipo)) throw new Error('tipo inválido en el código ' + x.codigo);
-    if (typeof x.nombre !== 'string' || !x.nombre.trim()) throw new Error('falta el nombre en el código ' + x.codigo);
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(x.fecha)) throw new Error('fecha inválida en el código ' + x.codigo);
-    if (!['Alta', 'Media', 'Baja'].includes(x.prioridad)) throw new Error('prioridad inválida en el código ' + x.codigo);
-    if (!Array.isArray(x.etiquetas)) throw new Error('etiquetas inválidas en el código ' + x.codigo);
-    return new Nodo(x.codigo, x.tipo, x.nombre.trim(), x.fecha, x.prioridad,
-                    x.etiquetas.map(String), typeof x.notas === 'string' ? x.notas : '');
-  });
-}
-
-function equilibrado(l, a, b) {       // inserta por el punto medio: árbol equilibrado
-  if (a > b) return;
-  const m = (a + b) >> 1;
-  arbol.insertar(l[m]);
-  equilibrado(l, a, m - 1);
-  equilibrado(l, m + 1, b);
-}
-
-function cargarLista(l) {
-  arbol = new Arbol();
-  l.sort((x, y) => x.codigo - y.codigo);
-  equilibrado(l, 0, l.length - 1);
-}
 
 // ---------- Interfaz ----------
 function render() {
@@ -303,7 +261,6 @@ function form(tipo, n) {
             return err('El código ' + cod + ' ya existe.');
           sel = cod;
         }
-        guardar();
         render();
       } }, cancelar]);
   if (ed) {
@@ -348,7 +305,6 @@ function eliminar() {
         if (!n) return err('El código ' + v + ' no existe.');
         if (!confirm('¿Eliminar ' + n.nombre + '?')) return false;
         arbol.eliminar(n.codigo);
-        guardar();
         render();
       } }, cancelar]);
   if (sel !== null) q('#f-cod').value = sel;
@@ -371,58 +327,20 @@ function etiquetas() {
       } }, cancelar]);
 }
 
-function exportar() {
-  const blob = new Blob([JSON.stringify(datos(), null, 2)], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'tareas.json';
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
-
-file.onchange = () => {
-  const f = file.files[0];
-  if (!f) return;
-  const r = new FileReader();
-  r.onload = () => {
-    try {
-      const l = validar(JSON.parse(r.result));
-      if (!confirm('Se reemplazarán los datos actuales por ' + l.length + ' elementos. ¿Continuar?')) return;
-      cargarLista(l);
-      sel = null;
-      filtro = null;
-      guardar();
-      render();
-    } catch (e) { alert('Archivo no válido: ' + e.message); }
-  };
-  r.readAsText(f);
-  file.value = '';
-};
-
 [['Nueva tarea', () => form('Tarea')], ['Nuevo proyecto', () => form('Proyecto')], ['Editar', editar],
- ['Buscar', buscar], ['Eliminar', eliminar], ['Tareas vencidas', vencidas], ['Tareas por etiqueta', etiquetas],
- ['Exportar JSON', exportar], ['Importar JSON', () => file.click()]].forEach(([t, f]) => {
+ ['Buscar', buscar], ['Eliminar', eliminar], ['Tareas vencidas', vencidas], ['Tareas por etiqueta', etiquetas]].forEach(([t, f]) => {
   const b = document.createElement('button');
   b.textContent = t;
   b.onclick = f;
   menu.append(b);
 });
 
-// ---------- Inicio: cargar datos guardados o usar los de ejemplo ----------
-let raw = null, cargado = false;
-try { raw = localStorage.getItem(KEY); } catch (e) {}
-if (raw !== null) {
-  try { cargarLista(validar(JSON.parse(raw))); cargado = true; }
-  catch (e) { try { localStorage.setItem(KEY + '.bak', raw); } catch (_) {} }
-}
-if (!cargado) {
-  [new Nodo(8, 'Proyecto', 'Proyecto final', dia(14), 'Alta', ['universidad', 'grupo'], 'Aplicación en Python con ABB e interfaz gráfica.'),
-   new Nodo(3, 'Tarea', 'Programar el árbol ABB', dia(-2), 'Alta', ['universidad', 'código'], 'Insertar, buscar y eliminar.'),
-   new Nodo(10, 'Tarea', 'Diseñar la interfaz', dia(5), 'Media', ['universidad', 'diseño'], 'Menú lateral y tabla.'),
-   new Nodo(1, 'Tarea', 'Pagar el internet', dia(-5), 'Baja', ['casa'], 'Se pasó la fecha de pago.')
-  ].forEach(n => arbol.insertar(n));
-  guardar();
-}
+// ---------- Inicio: datos de ejemplo (todo vive en el árbol, en memoria) ----------
+[new Nodo(8, 'Proyecto', 'Proyecto final', dia(14), 'Alta', ['universidad', 'grupo'], 'Aplicación en Python con ABB e interfaz gráfica.'),
+ new Nodo(3, 'Tarea', 'Programar el árbol ABB', dia(-2), 'Alta', ['universidad', 'código'], 'Insertar, buscar y eliminar.'),
+ new Nodo(10, 'Tarea', 'Diseñar la interfaz', dia(5), 'Media', ['universidad', 'diseño'], 'Menú lateral y tabla.'),
+ new Nodo(1, 'Tarea', 'Pagar el internet', dia(-5), 'Baja', ['casa'], 'Se pasó la fecha de pago.')
+].forEach(n => arbol.insertar(n));
 render();
 </script>
 </body>
